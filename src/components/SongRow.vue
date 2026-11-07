@@ -26,9 +26,7 @@ const { log } = useLog();
 const { play, isCurrent, isPlaying, currentUrlData } = usePlayer();
 const { enqueueOne, cancel, getTask, zipBatch } = useDownloadQueue();
 
-const artists = computed(() =>
-  (props.song.ar || props.song.artists || []).map(a => a.name).join(' / ')
-);
+const artistList = computed(() => props.song.ar || props.song.artists || []);
 const album = computed(() => props.song.al?.name || props.song.album?.name || '');
 const coverUrl = computed(() =>
   props.song.al?.picUrl || props.song.album?.picUrl || ''
@@ -112,7 +110,7 @@ function onDownloadClick() {
   enqueueOne(props.song, props.level, props.urlData);
 }
 
-const emit = defineEmits<{ 'update:selected': [value: boolean], 'click-album': [id: number]; }>();
+const emit = defineEmits<{ 'update:selected': [value: boolean], 'click-album': [id: number], 'click-artist': [id: number]; }>();
 const albumId = computed(() => props.song.al?.id || props.song.album?.id || 0);
 </script>
 
@@ -136,15 +134,30 @@ const albumId = computed(() => props.song.al?.id || props.song.album?.id || 0);
       <div class="song-name" :title="song.name || '未知歌曲'">
         {{ song.name || '未知歌曲' }}
       </div>
-      <div v-if="artists || album" class="song-sub muted small" :title="artists + (album ? ' · ' + album : '')">
-        <span v-if="artists">{{ artists }}</span>
+      <div
+        v-if="artistList.length > 0 || album"
+        class="song-sub muted small"
+      >
+        <template v-if="artistList.length > 0">
+          <template v-for="(artist, index) in artistList" :key="artist.id || index">
+            <span
+              v-if="artist.id && artist.id > 0"
+              class="album-link"
+              :title="`查看歌手：${artist.name}`"
+              @click.stop="emit('click-artist', artist.id)"
+            >{{ artist.name }}</span>
+            <span v-else>{{ artist.name }}</span>
+            <span v-if="index < artistList.length - 1"> / </span>
+          </template>
+        </template>
         <template v-if="album">
-          <span v-if="artists"> · </span>
-          <!-- 只有当有有效的 albumId 时才允许点击 -->
-          <span v-if="albumId > 0" class="album-link" :title="`查看专辑：${album}`"
-            @click.stop="emit('click-album', albumId)">
-            {{ album }}
-          </span>
+          <span v-if="artistList.length > 0"> · </span>
+          <span
+            v-if="albumId > 0"
+            class="album-link"
+            :title="`查看专辑：${album}`"
+            @click.stop="emit('click-album', albumId)"
+          >{{ album }}</span>
           <span v-else>{{ album }}</span>
         </template>
       </div>

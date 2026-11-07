@@ -39,19 +39,29 @@ type ResultState =
 
 const state = ref<ResultState>({ kind: 'empty' });
 
-const history = ref<ResultState[]>([]);
+interface HistoryEntry {
+  state: ResultState;
+  input: string;
+}
+
+const history = ref<HistoryEntry[]>([]);
 
 function goBack() {
   const prev = history.value.pop();
   if (prev) {
-    state.value = prev;
-    selectedIds.value = new Set(); // 回退时清空勾选
-    parseValue.value = ''; // 清空输入框，防止混淆
+    state.value = prev.state;
+    parseValue.value = prev.input; // 恢复当时的输入内容
+    selectedIds.value = new Set(); // 清空勾选状态
   }
 }
 
 function parseAlbum(id: number) {
   parseValue.value = "https://music.163.com/#/album?id="+String(id);
+  handleParse();
+}
+
+function parseArtist(id: number) {
+  parseValue.value = `https://music.163.com/artist?id=${id}`;
   handleParse();
 }
 
@@ -224,7 +234,10 @@ async function handleParse() {
   // 1. 压入历史栈（如果当前已经是有效结果）
   if (state.value.kind === 'list' || state.value.kind === 'song') {
     // 防止压入连续的相同状态
-    history.value.push(state.value);
+    history.value.push({
+      state: state.value,
+      input: parseValue.value,
+    });
     if (history.value.length > 20) history.value.shift(); // 限制栈深度防内存泄漏
   }
 
@@ -265,6 +278,32 @@ async function handleParse() {
       if (!song) throw new Error('未找到该歌曲');
       state.value = { kind: 'song', song, urlData: songUrlData ?? null };
       log('info', `解析歌曲：${song.name}`);
+      return;
+    }
+
+    if (info.type === 'artist') {
+      // 拉取歌手详情和歌曲列表（一次性拿前 1000 首热门）
+      const [detailRes, songsRes] = await Promise.all([
+        api<any>('/artist/detail', { id: info.id }),
+        api<any>('/artist/songs', { id: info.id, limit: 1000, order: 'hot' }),
+      ]);
+      const artist = detailRes?.data?.artist;
+      const rawSongs: Song[] = songsRes?.songs || [];
+      
+      if (!artist) throw new Error('未找到该歌手');
+      
+      // 同样为了保证封面和时长，用 fetchFullSongs 洗一遍数据
+      const ids = rawSongs.map(s => s.id);
+      const detailSongs = await fetchFullSongs(ids);
+      const songs = mergeByIds(ids, detailSongs, rawSongs);
+
+      state.value = {
+        kind: 'list',
+        title: `歌手：${artist.name}`,
+        count: songs.length,
+        items: songs.map(s => ({ song: s, urlData: null })),
+      };
+      log('info', `解析歌手：${artist.name}（${songs.length} 首）`);
       return;
     }
 
@@ -359,7 +398,12 @@ async function handleParse() {
     <div v-else-if="state.kind === 'error'" class="empty" style="color:var(--err)">
       解析失败：{{ state.error }}
     </div>
-    <SongRow v-else-if="state.kind === 'song'" :song="state.song" :url-data="state.urlData" :level="level" />
+    <SongRow v-else-if="state.kind === 'song'"
+      :song="state.song"
+      :url-data="state.urlData"
+      :level="level"
+      @click-album="parseAlbum"
+      @click-artist="parseArtist" />
     <template v-else>
       <div class="result-title">
         <span class="result-title-name" :title="state.title">{{ state.title }}</span>
@@ -429,6 +473,7 @@ async function handleParse() {
         :selected="selectedIds.has(item.song.id)"
         @update:selected="(v) => toggleSelect(item.song.id, v)"
         @click-album="parseAlbum"
+        @click-artist="parseArtist"
       />
 
       <!-- 新增：加载剩余 -->

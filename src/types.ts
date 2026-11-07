@@ -58,10 +58,11 @@ export interface UserProfile {
   signature?: string;
 }
 
-export interface ParseResult {
-  type: "song" | "playlist" | "album";
-  id: string;
-}
+export type ParseResult =
+  | { type: 'song'; id: string }
+  | { type: 'playlist'; id: string }
+  | { type: 'album'; id: string }
+  | { type: 'artist'; id: string };
 
 export type TabName = "main" | "settings" | "logs" | "account";
 export type LoginMethod = "qr" | "cookie" | "music-u";
