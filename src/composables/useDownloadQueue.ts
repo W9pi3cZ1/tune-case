@@ -4,6 +4,7 @@ import type { QualityLevel, Song, SongUrlData } from '../types';
 import { useApi } from './useApi';
 import { useLog } from './useLog';
 import { fetchWithProgress, saveBlob, safeFilename } from '../utils/download';
+import { forceHttps } from '../utils/url';
 import { getOptimizedCoverUrl } from '../utils/cover'; // 导入工具函数
 import { embedMetadata } from '../utils/tagWriter';
 
@@ -193,7 +194,7 @@ export function useDownloadQueue() {
       }
       if (!d?.url) throw new Error('无可用播放地址');
 
-      const { buffer, contentType } = await fetchWithProgress(d.url, {
+      const { buffer, contentType } = await fetchWithProgress(forceHttps(d.url), {
         signal: ctrl.signal,
         onProgress: (p) => { t.received = p.received; t.total = p.total; },
       });

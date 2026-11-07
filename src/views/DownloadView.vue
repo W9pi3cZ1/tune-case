@@ -8,6 +8,7 @@ import { usePlayer } from '../composables/usePlayer';
 import { useDownloadQueue } from '../composables/useDownloadQueue';
 import { parseInput } from '../utils/parse';
 import { safeFilename } from '../utils/download';
+import { forceHttps } from '../utils/url.ts';
 
 const { api } = useApi();
 const { log } = useLog();
@@ -170,8 +171,12 @@ async function handleParse() {
         api<any>('/song/url/v1', { id: info.id, level: level.value }),
       ]);
       const song = detail?.songs?.[0];
+      const songUrlData = urlRes?.data?.[0];
+      if (songUrlData?.url) {
+        songUrlData.url = forceHttps(songUrlData.url);
+      }
       if (!song) throw new Error('未找到该歌曲');
-      state.value = { kind: 'song', song, urlData: urlRes?.data?.[0] ?? null };
+      state.value = { kind: 'song', song, urlData: songUrlData ?? null };
       log('info', `解析歌曲：${song.name}`);
       return;
     }

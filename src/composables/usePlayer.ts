@@ -1,5 +1,6 @@
 import { ref } from 'vue';
 import type { Song, SongUrlData } from '../types';
+import { forceHttps } from '../utils/url';
 
 const audio = ref<HTMLAudioElement | null>(null);
 const currentSong = ref<Song | null>(null);
@@ -28,7 +29,7 @@ export function usePlayer() {
 
   currentSong.value = song;
   currentUrlData.value = urlData;
-  el.src = urlData.url;
+  el.src = forceHttps(urlData.url); 
   currentTime.value = 0;
 
   // dt（毫秒）是权威时长；urlData.time 次之；
