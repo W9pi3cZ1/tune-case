@@ -98,13 +98,13 @@ const dlTitle = computed(() => {
 function onDownloadClick() {
   if (zipBatch.value?.active) return;
   const s = dlStatus.value;
-  
+
   // 正在进行中的状态，点击则取消
   if (s === 'queued' || s === 'fetching' || s === 'processing') {
     cancel(props.song.id);
     return;
   }
-  
+
   // 保存中不允许点击，防止重复保存
   if (s === 'saving') return;
 
@@ -112,28 +112,21 @@ function onDownloadClick() {
   enqueueOne(props.song, props.level, props.urlData);
 }
 
-const emit = defineEmits<{ 'update:selected': [value: boolean] }>();
+const emit = defineEmits<{ 'update:selected': [value: boolean], 'click-album': [id: number]; }>();
+const albumId = computed(() => props.song.al?.id || props.song.album?.id || 0);
 </script>
 
 <template>
   <div class="song-row" :class="{ active: isActiveSong }">
     <div v-if="selectable" class="song-check">
-    <input
-        type="checkbox"
-        :checked="selected"
-        @change="emit('update:selected', ($event.target as HTMLInputElement).checked)"
-      />
+      <input type="checkbox" :checked="selected"
+        @change="emit('update:selected', ($event.target as HTMLInputElement).checked)" />
     </div>
     <div class="song-cover-wrap">
       <img v-if="coverUrl" :src="coverUrl" class="song-cover" alt="" loading="lazy" />
       <div v-else class="song-cover song-cover--placeholder"></div>
-      <button
-        type="button"
-        class="song-cover-play"
-        :disabled="noUrl || playLoading"
-        :title="isThisPlaying ? '暂停' : '播放'"
-        @click="onPlay"
-      >
+      <button type="button" class="song-cover-play" :disabled="noUrl || playLoading"
+        :title="isThisPlaying ? '暂停' : '播放'" @click="onPlay">
         <IconPause v-if="isThisPlaying" />
         <IconPlay v-else />
       </button>
@@ -143,41 +136,35 @@ const emit = defineEmits<{ 'update:selected': [value: boolean] }>();
       <div class="song-name" :title="song.name || '未知歌曲'">
         {{ song.name || '未知歌曲' }}
       </div>
-      <div
-        v-if="artists || album"
-        class="song-sub muted small"
-        :title="artists + (album ? ' · ' + album : '')"
-      >
-        {{ artists }}<template v-if="album"> · {{ album }}</template>
+      <div v-if="artists || album" class="song-sub muted small" :title="artists + (album ? ' · ' + album : '')">
+        <span v-if="artists">{{ artists }}</span>
+        <template v-if="album">
+          <span v-if="artists"> · </span>
+          <!-- 只有当有有效的 albumId 时才允许点击 -->
+          <span v-if="albumId > 0" class="album-link" :title="`查看专辑：${album}`"
+            @click.stop="emit('click-album', albumId)">
+            {{ album }}
+          </span>
+          <span v-else>{{ album }}</span>
+        </template>
       </div>
     </div>
 
+
     <div class="song-actions">
-      <button
-        type="button"
-        class="icon-btn"
-        :disabled="dlStatus === 'saving' || zipBatch?.active"
-        :title="isThisPlaying ? '暂停' : '试听'"
-        @click="onPlay"
-      >
+      <button type="button" class="icon-btn" :disabled="dlStatus === 'saving' || zipBatch?.active"
+        :title="isThisPlaying ? '暂停' : '试听'" @click="onPlay">
         <IconLoader v-if="playLoading" class="spin" />
         <IconPause v-else-if="isThisPlaying" />
         <IconPlay v-else />
       </button>
 
-      <button
-        type="button"
-        class="icon-btn dl-btn"
-        :class="{
-          'is-done': dlStatus === 'done',
-          'is-error': dlStatus === 'error' || dlStatus === 'canceled',
-          'is-active': dlStatus === 'queued' || dlStatus === 'fetching'
-            || dlStatus === 'processing' || dlStatus === 'saving',
-        }"
-        :disabled="dlStatus === 'saving'"
-        :title="dlTitle"
-        @click="onDownloadClick"
-      >
+      <button type="button" class="icon-btn dl-btn" :class="{
+        'is-done': dlStatus === 'done',
+        'is-error': dlStatus === 'error' || dlStatus === 'canceled',
+        'is-active': dlStatus === 'queued' || dlStatus === 'fetching'
+          || dlStatus === 'processing' || dlStatus === 'saving',
+      }" :disabled="dlStatus === 'saving'" :title="dlTitle" @click="onDownloadClick">
         <!-- done -->
         <IconCheck v-if="dlStatus === 'done'" />
         <!-- error / canceled -->
@@ -188,13 +175,8 @@ const emit = defineEmits<{ 'update:selected': [value: boolean] }>();
         <template v-else-if="dlStatus === 'fetching' || dlStatus === 'processing' || dlStatus === 'saving'">
           <svg class="progress-ring" viewBox="0 0 36 36">
             <circle class="progress-ring-bg" cx="18" cy="18" :r="R" />
-            <circle
-              v-if="dlPercent !== null"
-              class="progress-ring-fill"
-              cx="18" cy="18" :r="R"
-              :stroke-dasharray="CIRCUMFERENCE"
-              :stroke-dashoffset="dashOffset"
-            />
+            <circle v-if="dlPercent !== null" class="progress-ring-fill" cx="18" cy="18" :r="R"
+              :stroke-dasharray="CIRCUMFERENCE" :stroke-dashoffset="dashOffset" />
           </svg>
           <span v-if="dlPercent !== null" class="dl-pct">{{ dlPercent }}</span>
           <IconLoader v-else class="spin progress-spin" />

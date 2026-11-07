@@ -841,3 +841,14 @@ audio {
   padding: 10px 24px;
   font-size: .9rem;
 }
+
+.album-link {
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: color 0.15s, text-decoration-color 0.15s;
+}
+.album-link:hover {
+  color: var(--brand);
+  text-decoration-color: var(--brand);
+}

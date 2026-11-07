@@ -39,6 +39,22 @@ type ResultState =
 
 const state = ref<ResultState>({ kind: 'empty' });
 
+const history = ref<ResultState[]>([]);
+
+function goBack() {
+  const prev = history.value.pop();
+  if (prev) {
+    state.value = prev;
+    selectedIds.value = new Set(); // 回退时清空勾选
+    parseValue.value = ''; // 清空输入框，防止混淆
+  }
+}
+
+function parseAlbum(id: number) {
+  parseValue.value = "https://music.163.com/#/album?id="+String(id);
+  handleParse();
+}
+
 /* ---------- 选择 ---------- */
 
 const selectedIds = ref<Set<number>>(new Set());
@@ -205,6 +221,13 @@ async function handleParse() {
   let raw = parseValue.value.trim();
   if (!raw) { state.value = { kind: 'empty' }; return; }
 
+  // 1. 压入历史栈（如果当前已经是有效结果）
+  if (state.value.kind === 'list' || state.value.kind === 'song') {
+    // 防止压入连续的相同状态
+    history.value.push(state.value);
+    if (history.value.length > 20) history.value.shift(); // 限制栈深度防内存泄漏
+  }
+
   reset();
   selectedIds.value = new Set();
   state.value = { kind: 'loading' };
@@ -326,6 +349,11 @@ async function handleParse() {
 
   <fieldset>
     <legend>结果</legend>
+    <div v-if="history.length > 0" class="history-back">
+      <button type="button" class="ghost small-btn" @click="goBack">
+        ← 返回上一步
+      </button>
+    </div>
     <div v-if="state.kind === 'empty'" class="empty">暂无结果，先在上面解析一个链接吧。</div>
     <div v-else-if="state.kind === 'loading'" class="empty">解析中…</div>
     <div v-else-if="state.kind === 'error'" class="empty" style="color:var(--err)">
@@ -391,9 +419,17 @@ async function handleParse() {
 
       </div>
 
-      <SongRow v-for="item in state.items" :key="item.song.id" :song="item.song" :url-data="item.urlData" :level="level"
-        :selectable="true" :selected="selectedIds.has(item.song.id)"
-        @update:selected="(v) => toggleSelect(item.song.id, v)" />
+      <SongRow
+        v-for="item in state.items"
+        :key="item.song.id"
+        :song="item.song"
+        :url-data="item.urlData"
+        :level="level"
+        :selectable="true"
+        :selected="selectedIds.has(item.song.id)"
+        @update:selected="(v) => toggleSelect(item.song.id, v)"
+        @click-album="parseAlbum"
+      />
 
       <!-- 新增：加载剩余 -->
       <div v-if="state.pendingIds && state.pendingIds.length > 0" class="load-more-wrap">
