@@ -8,7 +8,7 @@ import { useLog } from '../composables/useLog';
 import { useQrLogin } from '../composables/useQrLogin';
 import { useRoute } from '../composables/useRoute';
 
-const { profile, status, loginMsg, loginMsgType, checkLoginStatus, logout } = useAuth();
+const { profile, loginMsg, loginMsgType, checkLoginStatus, logout } = useAuth();
 const { setCookie, setCookieSource } = useCookie();
 const { log } = useLog();
 const { go } = useRoute();
