@@ -31,7 +31,7 @@ watch(method, async (v) => {
   if (v === 'qr' && !unikey.value && !polling.value) {
     try { await refreshQrKey(); } catch { /* logged inside */ }
   }
-});
+}, { immediate: true });
 
 function onCookieFileChange(e: Event) {
   const files = (e.target as HTMLInputElement).files;
