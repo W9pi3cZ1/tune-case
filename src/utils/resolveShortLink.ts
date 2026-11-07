@@ -1,4 +1,7 @@
+import { useLog } from "../composables/useLog";
+
 export async function resolveShortLink(url: string): Promise<string> {
+  const { log } = useLog();
   // 支持 163cn.tv 以及新版可能出现的 163cn.link 域名
   if (!/163cn\.(tv|link)/i.test(url)) {
     return url;
@@ -20,7 +23,7 @@ export async function resolveShortLink(url: string): Promise<string> {
       return data.original;
     }
   } catch (error) {
-    console.warn('[短链解析] Worker 请求失败或超时:', error);
+    log('warn',`[短链解析] Worker 请求失败或超时: ${error}`);
   }
 
   // 兜底：解析失败直接返回短链，交给后续 parseInput 抛出格式错误
