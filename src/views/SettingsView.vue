@@ -68,7 +68,7 @@ function onConcurrencyChange(e: Event) {
   <fieldset>
     <legend>下载设置</legend>
     <div class="field">
-      <label for="concurrency" class="small muted">并发下载数（1-5）：</label>
+      <label for="concurrency" class="small muted">并发下载数（1-128）：</label>
       <div class="row">
         <input id="concurrency" type="range" min="1" max="128" step="1" :value="config.concurrency"
           @input="onConcurrencyChange" style="flex:1; max-width:100%;" />
