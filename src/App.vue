@@ -4,6 +4,7 @@ import type { Component } from 'vue';
 import IconGithub from '~icons/simple-icons/github';
 import TabsNav from './components/TabsNav.vue';
 import PlayerBar from './components/PlayerBar.vue';
+import FullscreenPlayer from './components/FullscreenPlayer.vue';
 import DownloadView from './views/DownloadView.vue';
 import SettingsView from './views/SettingsView.vue';
 import LogsView from './views/LogsView.vue';
@@ -23,7 +24,7 @@ const { log } = useLog();
 const { checkLoginStatus } = useAuth();
 const { stopPolling } = useQrLogin();
 const { syncFromStorage } = useConfig();
-const { isPlaying, currentTime, duration, bindAudio } = usePlayer();
+const { isPlaying, currentTime, duration, bindAudio, playNext } = usePlayer();
 
 const views: Record<TabName, Component> = {
   main: DownloadView,
@@ -47,7 +48,10 @@ function onAudioLoaded() {
     duration.value = audioEl.value.duration;
   }
 }
-function onAudioEnded() { isPlaying.value = false; }
+function onAudioEnded() {
+  isPlaying.value = false;
+  playNext();
+}
 
 watch(active, (v) => {
   if (v !== 'account') stopPolling();
@@ -99,4 +103,5 @@ onMounted(async () => {
   />
 
   <PlayerBar />
+  <FullscreenPlayer />
 </template>

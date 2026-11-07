@@ -1,46 +1,127 @@
-import { ref } from "vue";
-import type { Song, SongUrlData } from "../types";
+import { computed, ref } from "vue";
+import type { QualityLevel, Song, SongUrlData } from "../types";
+import { useApi } from "./useApi";
+import { useLog } from "./useLog";
 import { forceHttps } from "../utils/url";
 
 const audio = ref<HTMLAudioElement | null>(null);
-const currentSong = ref<Song | null>(null);
+const playlist = ref<Song[]>([]);
+const currentIndex = ref(-1);
 const currentUrlData = ref<SongUrlData | null>(null);
 const isPlaying = ref(false);
+const isFullscreen = ref(false);
 const currentTime = ref(0);
 const duration = ref(0);
 const volume = ref(1);
+const playLoading = ref(false);
+const playLevel = ref<QualityLevel>("exhigh"); // 播放器专属音质
 
 export function usePlayer() {
+  const { api } = useApi();
+  const { log } = useLog();
+
+  const currentSong = computed(() => {
+    if (currentIndex.value >= 0 && currentIndex.value < playlist.value.length) {
+      return playlist.value[currentIndex.value];
+    }
+    return null;
+  });
+
   const isCurrent = (id: number) => currentSong.value?.id === id;
 
-  /**
-   * 播放入口。同一个 id 再次调用是 toggle 语义，
-   * 不同 id 则切换并开始播放。
-   */
-  async function play(song: Song, urlData: SongUrlData): Promise<void> {
-    const el = audio.value;
-    if (!el || !urlData.url) return;
+  async function fetchPlayUrl(song: Song): Promise<SongUrlData> {
+    const res = await api<any>("/song/url/v1", {
+      id: song.id,
+      level: playLevel.value,
+    });
+    const d = res?.data?.[0];
+    if (!d?.url) throw new Error("未获取到可用的播放地址");
+    return d;
+  }
 
-    if (currentSong.value?.id === song.id) {
-      if (el.paused) await el.play();
-      else el.pause();
+  async function playSongAt(index: number) {
+    const el = audio.value;
+    if (!el || index < 0 || index >= playlist.value.length) return;
+
+    currentIndex.value = index;
+    const song = playlist.value[index];
+
+    playLoading.value = true;
+    try {
+      const d = await fetchPlayUrl(song);
+      currentUrlData.value = d;
+      el.src = forceHttps(d.url!);
+      currentTime.value = 0;
+      duration.value = (song.dt ?? d.time ?? 0) / 1000;
+      await el.play();
+    } catch (e) {
+      log("error", `播放失败 (${song.name})：` + (e as Error).message);
+      isPlaying.value = false;
+    } finally {
+      playLoading.value = false;
+    }
+  }
+
+  async function play(song: Song, urlData?: SongUrlData | null) {
+    const el = audio.value;
+    if (!el) return;
+
+    const existIndex = playlist.value.findIndex((s) => s.id === song.id);
+    if (existIndex >= 0) {
+      if (currentIndex.value === existIndex) {
+        if (el.paused) await el.play();
+        else el.pause();
+        return;
+      }
+      if (urlData?.url) {
+        currentIndex.value = existIndex;
+        currentUrlData.value = urlData;
+        el.src = forceHttps(urlData.url);
+        currentTime.value = 0;
+        duration.value = (song.dt ?? urlData.time ?? 0) / 1000;
+        try {
+          await el.play();
+        } catch {}
+      } else {
+        await playSongAt(existIndex);
+      }
       return;
     }
 
-    currentSong.value = song;
-    currentUrlData.value = urlData;
-    el.src = forceHttps(urlData.url);
-    currentTime.value = 0;
+    playlist.value = [song];
+    currentIndex.value = 0;
+    if (urlData?.url) {
+      currentUrlData.value = urlData;
+      el.src = forceHttps(urlData.url);
+      currentTime.value = 0;
+      duration.value = (song.dt ?? urlData.time ?? 0) / 1000;
+      try {
+        await el.play();
+      } catch {}
+    } else {
+      await playSongAt(0);
+    }
+  }
 
-    // dt（毫秒）是权威时长；urlData.time 次之；
-    // 都没有就先显示 0:00，等 loadedmetadata 事件纠正
-    const dtMs = song.dt ?? 0;
-    duration.value = dtMs > 0 ? dtMs / 1000 : 0;
+  /** 替换当前播放列表并开始播放 */
+  function setPlaylist(songs: Song[], startIndex: number) {
+    playlist.value = [...songs];
+    playSongAt(startIndex);
+  }
 
-    try {
-      await el.play();
-    } catch {
-      /* 自动播放被拦，UI 会显示暂停态 */
+  function playNext() {
+    if (currentIndex.value < playlist.value.length - 1) {
+      playSongAt(currentIndex.value + 1);
+    } else {
+      log("info", "已经是最后一首了");
+    }
+  }
+
+  function playPrev() {
+    if (currentIndex.value > 0) {
+      playSongAt(currentIndex.value - 1);
+    } else {
+      log("info", "已经是第一首了");
     }
   }
 
@@ -69,41 +150,38 @@ export function usePlayer() {
     audio.value?.pause();
   }
 
-  function reset() {
-    const el = audio.value;
-    if (el) {
-      el.pause();
-      el.removeAttribute("src");
-      el.load();
-    }
-    currentSong.value = null;
-    currentUrlData.value = null;
-    isPlaying.value = false;
-    currentTime.value = 0;
-    duration.value = 0;
-  }
-
-  /** 由 App.vue 把 <audio> 元素绑进来 */
   function bindAudio(el: HTMLAudioElement | null) {
     audio.value = el;
     if (el) el.volume = volume.value;
   }
 
+  function toggleFullscreen() {
+    isFullscreen.value = !isFullscreen.value;
+  }
+
   return {
     audio,
+    playlist,
+    currentIndex,
     currentSong,
     currentUrlData,
     isPlaying,
     currentTime,
     duration,
     volume,
+    playLoading,
+    playLevel,
     isCurrent,
     play,
+    setPlaylist,
+    playNext,
+    playPrev,
     toggle,
     seek,
     setVolume,
     pause,
-    reset,
     bindAudio,
+    isFullscreen,
+    toggleFullscreen,
   };
 }

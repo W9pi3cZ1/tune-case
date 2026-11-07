@@ -16,14 +16,15 @@ import { useDownloadQueue } from '../composables/useDownloadQueue';
 const props = defineProps<{
   song: Song;
   urlData?: SongUrlData | null;
-  level: QualityLevel;
+  level: QualityLevel; // 下载音质
+  playContext?: Song[]; // 当前列表
   selectable?: boolean;
   selected?: boolean;
 }>();
 
 const { api } = useApi();
 const { log } = useLog();
-const { play, isCurrent, isPlaying, currentUrlData } = usePlayer();
+const { play, setPlaylist, isCurrent, isPlaying, currentUrlData } = usePlayer();
 const { enqueueOne, cancel, getTask, zipBatch } = useDownloadQueue();
 
 const artistList = computed(() => props.song.ar || props.song.artists || []);
@@ -51,6 +52,17 @@ async function onPlay() {
     await play(props.song, currentUrlData.value);
     return;
   }
+  
+  // 如果传入了播放上下文（比如列表里的歌）
+  if (props.playContext && props.playContext.length > 0) {
+    const idx = props.playContext.findIndex(s => s.id === props.song.id);
+    if (idx >= 0) {
+      setPlaylist(props.playContext, idx);
+      return;
+    }
+  }
+
+  // 单曲播放
   playLoading.value = true;
   try {
     const d = props.urlData?.url ? props.urlData : await fetchSongUrl();

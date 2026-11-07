@@ -4,7 +4,6 @@ import type { QualityLevel, Song, SongUrlData } from '../types';
 import SongRow from '../components/SongRow.vue';
 import { useApi } from '../composables/useApi';
 import { useLog } from '../composables/useLog';
-import { usePlayer } from '../composables/usePlayer';
 import { useDownloadQueue, type DownloadTaskState } from '../composables/useDownloadQueue';
 import { extractUrl, parseInput } from '../utils/parse';
 import { safeFilename } from '../utils/download';
@@ -13,7 +12,6 @@ import { resolveShortLink } from '../utils/resolveShortLink';
 
 const { api } = useApi();
 const { log } = useLog();
-const { reset } = usePlayer();
 
 const {
   enqueueBatch, cancelBatch,
@@ -21,7 +19,7 @@ const {
 } = useDownloadQueue();
 
 const parseValue = ref('');
-const level = ref<QualityLevel>('exhigh');
+const downloadLevel = ref<QualityLevel>('exhigh');
 
 type ResultState =
   | { kind: 'empty' }
@@ -56,7 +54,7 @@ function goBack() {
 }
 
 function parseAlbum(id: number) {
-  parseValue.value = "https://music.163.com/#/album?id="+String(id);
+  parseValue.value = "https://music.163.com/#/album?id=" + String(id);
   handleParse();
 }
 
@@ -100,7 +98,7 @@ function downloadSelected() {
   const base = state.value.title.replace(/^(歌单|专辑)：/, '');
   const zipName = safeFilename(base) + '.zip';
   try {
-    enqueueBatch(selected, level.value, zipName);
+    enqueueBatch(selected, downloadLevel.value, zipName);
   } catch (e) {
     log('error', (e as Error).message);
   }
@@ -241,7 +239,6 @@ async function handleParse() {
     if (history.value.length > 20) history.value.shift(); // 限制栈深度防内存泄漏
   }
 
-  reset();
   selectedIds.value = new Set();
   state.value = { kind: 'loading' };
 
@@ -268,7 +265,7 @@ async function handleParse() {
     if (info.type === 'song') {
       const [detail, urlRes] = await Promise.all([
         api<any>('/song/detail', { ids: info.id }),
-        api<any>('/song/url/v1', { id: info.id, level: level.value }),
+        api<any>('/song/url/v1', { id: info.id, level: downloadLevel.value }),
       ]);
       const song = detail?.songs?.[0];
       const songUrlData = urlRes?.data?.[0];
@@ -289,9 +286,9 @@ async function handleParse() {
       ]);
       const artist = detailRes?.data?.artist;
       const rawSongs: Song[] = songsRes?.songs || [];
-      
+
       if (!artist) throw new Error('未找到该歌手');
-      
+
       // 同样为了保证封面和时长，用 fetchFullSongs 洗一遍数据
       const ids = rawSongs.map(s => s.id);
       const detailSongs = await fetchFullSongs(ids);
@@ -373,8 +370,8 @@ async function handleParse() {
       <button type="button" @click="handleParse">解析</button>
     </div>
     <div class="row" style="margin-top:8px">
-      <label for="level" class="small muted">音质：</label>
-      <select id="level" v-model="level">
+      <label for="level" class="small muted">下载音质：</label>
+      <select id="level" v-model="downloadLevel">
         <option value="standard">标准</option>
         <option value="higher">较高</option>
         <option value="exhigh">极高</option>
@@ -398,13 +395,9 @@ async function handleParse() {
     <div v-else-if="state.kind === 'error'" class="empty" style="color:var(--err)">
       解析失败：{{ state.error }}
     </div>
-    <SongRow v-else-if="state.kind === 'song'"
-      :song="state.song"
-      :url-data="state.urlData"
-      :level="level"
-      @click-album="parseAlbum"
-      @click-artist="parseArtist" />
-    <template v-else>
+    <SongRow v-else-if="state.kind === 'song'" :key="state.song.id" :song="state.song" :url-data="state.urlData"
+        :level="downloadLevel" :play-context="[state.song]" @click-album="parseAlbum" @click-artist="parseArtist"/>
+    <template v-else> 
       <div class="result-title">
         <span class="result-title-name" :title="state.title">{{ state.title }}</span>
         <span class="result-title-count muted small">
@@ -463,18 +456,10 @@ async function handleParse() {
 
       </div>
 
-      <SongRow
-        v-for="item in state.items"
-        :key="item.song.id"
-        :song="item.song"
-        :url-data="item.urlData"
-        :level="level"
-        :selectable="true"
-        :selected="selectedIds.has(item.song.id)"
-        @update:selected="(v) => toggleSelect(item.song.id, v)"
-        @click-album="parseAlbum"
-        @click-artist="parseArtist"
-      />
+      <SongRow v-for="item in state.items" :key="item.song.id" :song="item.song" :url-data="item.urlData"
+        :level="downloadLevel" :play-context="state.items.map(i => i.song)" :selectable="true"
+        :selected="selectedIds.has(item.song.id)" @update:selected="(v) => toggleSelect(item.song.id, v)"
+        @click-album="parseAlbum" @click-artist="parseArtist" />
 
       <!-- 新增：加载剩余 -->
       <div v-if="state.pendingIds && state.pendingIds.length > 0" class="load-more-wrap">

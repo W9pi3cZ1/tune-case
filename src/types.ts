@@ -48,6 +48,7 @@ export interface SongUrlData {
   level?: string;
   br?: number;
   size?: number;
+  time?: number
 }
 
 export interface UserProfile {
