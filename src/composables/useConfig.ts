@@ -5,6 +5,7 @@ const CONFIG_KEY = "config";
 const DEFAULT_CONFIG: AppConfig = {
   base_url: "https://ncmapi.xslimenb.eu.org/",
   theme: "auto",
+  concurrency: 4,
 };
 
 function readConfig(): AppConfig {

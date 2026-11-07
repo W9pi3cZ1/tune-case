@@ -5,7 +5,7 @@ import SongRow from '../components/SongRow.vue';
 import { useApi } from '../composables/useApi';
 import { useLog } from '../composables/useLog';
 import { usePlayer } from '../composables/usePlayer';
-import { useDownloadQueue } from '../composables/useDownloadQueue';
+import { useDownloadQueue, type DownloadTaskState } from '../composables/useDownloadQueue';
 import { extractUrl, parseInput } from '../utils/parse';
 import { safeFilename } from '../utils/download';
 import { forceHttps } from '../utils/url.ts';
@@ -17,7 +17,7 @@ const { reset } = usePlayer();
 
 const {
   enqueueBatch, cancelBatch,
-  zipBatch, currentDownloading, currentPercent, batchPercent, isAnyActive,
+  zipBatch, activeTasks, activeQueuePercent, batchPercent, isAnyActive,
 } = useDownloadQueue();
 
 const parseValue = ref('');
@@ -165,13 +165,13 @@ async function handleSearch(keywords: string) {
     // type=1 搜索单曲，limit=50
     const res = await api<any>('/search', { keywords, type: 1, limit: 50 });
     const rawSongs = res?.result?.songs || [];
-    
+
     if (rawSongs.length === 0) {
-      state.value = { 
-        kind: 'list', 
-        title: `搜索："${keywords}"`, 
-        count: 0, 
-        items: [] 
+      state.value = {
+        kind: 'list',
+        title: `搜索："${keywords}"`,
+        count: 0,
+        items: []
       };
       log('info', '未找到相关歌曲');
       return;
@@ -179,10 +179,10 @@ async function handleSearch(keywords: string) {
 
     // 1. 从搜索结果提取歌曲 ID
     const ids = rawSongs.map((s: any) => s.id);
-    
+
     // 2. 批量拉取完整详情（此时能拿到封面 picUrl、准确时长 dt 等）
     const detailSongs = await fetchFullSongs(ids);
-    
+
     // 3. 按原搜索顺序还原
     const songs = mergeByIds(ids, detailSongs, []);
 
@@ -204,7 +204,7 @@ async function handleSearch(keywords: string) {
 async function handleParse() {
   let raw = parseValue.value.trim();
   if (!raw) { state.value = { kind: 'empty' }; return; }
-  
+
   reset();
   selectedIds.value = new Set();
   state.value = { kind: 'loading' };
@@ -354,31 +354,41 @@ async function handleParse() {
       </div>
 
       <div v-if="zipBatch" class="batch-progress-wrap">
-        <div class="batch-progress-row">
+
+        <!-- 打包状态提示 -->
+        <div class="batch-progress-row" v-if="zipBatch.packing">
+          <span class="batch-progress-label small muted">状态</span>
+          <span class="batch-progress-name small" style="color: var(--brand); flex: 1;">
+            正在打包 ZIP（成功 {{ zipBatch.done }} 首，失败 {{ zipBatch.failed }} 首），请稍候…
+          </span>
+          <IconLoader class="spin" style="color: var(--brand);" />
+        </div>
+
+        <!-- 第一条：当前并发下载队列进度 -->
+        <div class="batch-progress-row" v-else-if="activeTasks.length > 0">
           <span class="batch-progress-label small muted">当前</span>
-          <span class="batch-progress-name small">
-            {{ currentDownloading?.songName || '准备中…' }}
+          <span class="batch-progress-name small" :title="activeTasks.map(t => t.songName).join(' / ')">
+            {{activeTasks.map((t: DownloadTaskState) => t.songName).join(' / ')}}
           </span>
           <div class="batch-progress-bar">
-            <div class="batch-progress-inner"
-              :class="{ 'is-indeterminate': currentDownloading && currentPercent === null }"
-              :style="currentPercent !== null ? { width: currentPercent + '%' } : undefined"></div>
+            <div class="batch-progress-inner" :style="{ width: activeQueuePercent + '%' }"></div>
           </div>
-          <span class="batch-progress-pct small">
-            {{ currentPercent !== null ? currentPercent + '%' : '…' }}
-          </span>
+          <span class="batch-progress-pct small">{{ activeQueuePercent }}%</span>
         </div>
-        <div class="batch-progress-row">
+
+        <!-- 第二条：总计进度 -->
+        <div class="batch-progress-row" v-if="!zipBatch.packing">
           <span class="batch-progress-label small muted">总计</span>
           <span class="batch-progress-name small">
             {{ zipBatch.done + zipBatch.failed }}/{{ zipBatch.total }} 首
-            <template v-if="zipBatch.failed > 0"> · {{ zipBatch.failed }} 失败</template>
+            <template v-if="zipBatch.failed > 0"> · <span class="err">{{ zipBatch.failed }} 失败</span></template>
           </span>
           <div class="batch-progress-bar">
             <div class="batch-progress-inner" :style="{ width: batchPercent + '%' }"></div>
           </div>
           <span class="batch-progress-pct small">{{ batchPercent }}%</span>
         </div>
+
       </div>
 
       <SongRow v-for="item in state.items" :key="item.song.id" :song="item.song" :url-data="item.urlData" :level="level"

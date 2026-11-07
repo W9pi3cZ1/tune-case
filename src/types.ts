@@ -9,6 +9,7 @@ export interface LogEntry {
 export interface AppConfig {
   base_url: string;
   theme: "auto" | "light" | "dark";
+  concurrency: number;
 }
 
 export type QualityLevel =

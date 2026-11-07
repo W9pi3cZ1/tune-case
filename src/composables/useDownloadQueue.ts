@@ -6,6 +6,7 @@ import { useLog } from "./useLog";
 import { fetchWithProgress, safeFilename, saveBlob } from "../utils/download";
 import { forceHttps } from "../utils/url";
 import { getOptimizedCoverUrl } from "../utils/cover"; // 导入工具函数
+import { useConfig } from "./useConfig";
 import { embedMetadata } from "../utils/tagWriter";
 
 export type DownloadStatus =
@@ -33,6 +34,7 @@ interface TaskInput {
   urlData?: SongUrlData | null;
 }
 
+// 1. 更新接口
 interface ZipBatch {
   name: string;
   ids: Set<number>;
@@ -42,10 +44,9 @@ interface ZipBatch {
   totalBytes: number;
   buffers: Map<number, { blob: Blob; filename: string }>;
   active: boolean;
+  packing: boolean; // 新增
 }
 
-const DEFAULT_CONCURRENCY = 2;
-const ZIP_CONCURRENCY = 1;
 const MAX_ZIP_SONGS = 1000; // 设一个极大的数字，相当于不限制
 const MAX_ZIP_BYTES = 1024 * 1024 * 1024; // 1 GB
 
@@ -54,7 +55,6 @@ const controllers = new Map<number, AbortController>();
 const pending = new Map<number, TaskInput>();
 const queue: number[] = [];
 let running = 0;
-let concurrency = DEFAULT_CONCURRENCY;
 
 const zipBatch = ref<ZipBatch | null>(null);
 
@@ -71,6 +71,7 @@ function isActive(s?: DownloadStatus) {
 export function useDownloadQueue() {
   const { api } = useApi();
   const { log } = useLog();
+  const { config } = useConfig();
 
   function getTask(id: number) {
     return tasks.get(id);
@@ -83,11 +84,11 @@ export function useDownloadQueue() {
   ) {
     if (zipBatch.value?.active) return;
     const existing = tasks.get(song.id);
-    if (existing && (isActive(existing.status))) return;
+    if (existing && isActive(existing.status)) return;
 
-    const artists = (song.ar || song.artists || []).map((a) => a.name).join(
-      " / ",
-    );
+    const artists = (song.ar || song.artists || [])
+      .map((a) => a.name)
+      .join(" / ");
     tasks.set(song.id, {
       status: "queued",
       received: 0,
@@ -97,7 +98,6 @@ export function useDownloadQueue() {
     });
     pending.set(song.id, { song, level, urlData });
     queue.push(song.id);
-    concurrency = DEFAULT_CONCURRENCY;
     pump();
   }
 
@@ -114,7 +114,7 @@ export function useDownloadQueue() {
 
     // 用 dt 粗估大小（128 kbps 保守估算）
     const estimated = items.reduce(
-      (sum, i) => sum + ((i.song.dt ?? 0) / 1000) * 128_000 / 8,
+      (sum, i) => sum + (((i.song.dt ?? 0) / 1000) * 128_000) / 8,
       0,
     );
     if (estimated > MAX_ZIP_BYTES) {
@@ -133,13 +133,13 @@ export function useDownloadQueue() {
       totalBytes: 0,
       buffers: new Map(),
       active: true,
+      packing: false,
     };
-    concurrency = ZIP_CONCURRENCY;
 
     for (const item of items) {
-      const artists = (item.song.ar || item.song.artists || []).map((a) =>
-        a.name
-      ).join(" / ");
+      const artists = (item.song.ar || item.song.artists || [])
+        .map((a) => a.name)
+        .join(" / ");
       tasks.set(item.song.id, {
         status: "queued",
         received: 0,
@@ -192,6 +192,9 @@ export function useDownloadQueue() {
   }
 
   async function pump() {
+    // 每次调度时都读取最新配置
+    const concurrency = Math.max(1, Math.min(128, config.value.concurrency || 4));
+
     while (running < concurrency && queue.length > 0) {
       const id = queue.shift()!;
       const info = pending.get(id);
@@ -205,6 +208,27 @@ export function useDownloadQueue() {
       });
     }
   }
+
+  const activeTasks = computed(() => {
+    const arr: DownloadTaskState[] = [];
+    for (const t of tasks.values()) {
+      if (t.status === "fetching" || t.status === "processing") {
+        arr.push(t);
+      }
+    }
+    return arr;
+  });
+
+  const activeQueuePercent = computed(() => {
+    const active = activeTasks.value;
+    if (active.length === 0) return 0;
+    let sum = 0;
+    for (const t of active) {
+      if (t.status === "processing") sum += 100;
+      else if (t.total > 0) sum += Math.min(100, (t.received / t.total) * 100);
+    }
+    return Math.round(sum / active.length);
+  });
 
   async function runOne(id: number, info: TaskInput) {
     const t = tasks.get(id)!;
@@ -239,9 +263,9 @@ export function useDownloadQueue() {
       );
 
       t.status = "processing";
-      const artists = (song.ar || song.artists || []).map((a) => a.name).join(
-        " / ",
-      );
+      const artists = (song.ar || song.artists || [])
+        .map((a) => a.name)
+        .join(" / ");
       const albumName = song.al?.name || song.album?.name || "";
       const coverUrl = getOptimizedCoverUrl(
         song.al?.picUrl || song.album?.picUrl,
@@ -281,7 +305,9 @@ export function useDownloadQueue() {
           log(
             "warn",
             `累计 ${
-              (batch.totalBytes / 1024 / 1024).toFixed(0)
+              (batch.totalBytes / 1024 / 1024).toFixed(
+                0,
+              )
             }MB，超过上限，终止`,
           );
           batch.active = false;
@@ -321,6 +347,7 @@ export function useDownloadQueue() {
     if (batch.done + batch.failed < batch.total) return;
 
     batch.active = false;
+    batch.packing = true; // 标记为正在打包
 
     if (batch.done === 0) {
       log("warn", "批量下载无成功项，跳过打包");
@@ -346,7 +373,9 @@ export function useDownloadQueue() {
       log(
         "info",
         `打包完成：${batch.name}（${
-          (zipBlob.size / 1024 / 1024).toFixed(1)
+          (zipBlob.size / 1024 / 1024).toFixed(
+            1,
+          )
         }MB）`,
       );
     } catch (e) {
@@ -356,29 +385,6 @@ export function useDownloadQueue() {
       zipBatch.value = null;
     }
   }
-
-  /** 第一条进度条用：当前正在下哪首 */
-  const currentDownloading = computed(() => {
-    const b = zipBatch.value;
-    if (!b || !b.active) return null;
-    for (const id of b.ids) {
-      const t = tasks.get(id);
-      if (
-        t &&
-        (t.status === "fetching" || t.status === "processing" ||
-          t.status === "saving")
-      ) {
-        return { id, ...t };
-      }
-    }
-    return null;
-  });
-
-  const currentPercent = computed(() => {
-    const t = currentDownloading.value;
-    if (!t || t.total <= 0) return null;
-    return Math.min(100, Math.round((t.received / t.total) * 100));
-  });
 
   const batchPercent = computed(() => {
     const b = zipBatch.value;
@@ -392,6 +398,7 @@ export function useDownloadQueue() {
     return false;
   });
 
+  // 导出 activeQueuePercent，删去原有的 currentDownloading 和 currentPercent
   return {
     tasks,
     getTask,
@@ -401,8 +408,8 @@ export function useDownloadQueue() {
     cancelBatch,
     clear,
     zipBatch,
-    currentDownloading,
-    currentPercent,
+    activeTasks,
+    activeQueuePercent,
     batchPercent,
     isAnyActive,
   };

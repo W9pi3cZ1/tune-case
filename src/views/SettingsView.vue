@@ -27,6 +27,11 @@ function onThemeChange(e: Event) {
   const v = (e.target as HTMLSelectElement).value as 'auto' | 'light' | 'dark';
   saveConfig({ theme: v });
 }
+function onConcurrencyChange(e: Event) {
+  const v = Number((e.target as HTMLInputElement).value);
+  saveConfig({ concurrency: v });
+}
+
 </script>
 
 <template>
@@ -35,13 +40,8 @@ function onThemeChange(e: Event) {
     <div class="field">
       <label for="api-base" class="small muted">基本路径 / BaseURL：</label>
       <div class="row">
-        <input
-          id="api-base"
-          v-model="baseUrlInput"
-          type="text"
-          placeholder="在此键入 API base ..."
-          style="flex:1;min-width:200px"
-        />
+        <input id="api-base" v-model="baseUrlInput" type="text" placeholder="在此键入 API base ..."
+          style="flex:1;min-width:200px" />
         <input type="button" value="保存" @click="saveBase" />
         <input type="button" value="重置" @click="resetBase" />
       </div>
@@ -63,6 +63,20 @@ function onThemeChange(e: Event) {
         <option value="light">浅色</option>
         <option value="dark">深色</option>
       </select>
+    </div>
+  </fieldset>
+  <fieldset>
+    <legend>下载设置</legend>
+    <div class="field">
+      <label for="concurrency" class="small muted">并发下载数（1-5）：</label>
+      <div class="row">
+        <input id="concurrency" type="range" min="1" max="128" step="1" :value="config.concurrency"
+          @input="onConcurrencyChange" style="flex:1; max-width:100%;" />
+        <span class="small">{{ config.concurrency }} 个任务同时下载</span>
+      </div>
+      <div class="muted small">
+        并发越高下载越快，但会占用更多内存和带宽。打包大量无损歌曲时建议使用 1-2 个并发，以防浏览器内存不足导致崩溃。
+      </div>
     </div>
   </fieldset>
 </template>
