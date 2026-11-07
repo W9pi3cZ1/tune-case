@@ -6,7 +6,7 @@ import { useApi } from '../composables/useApi';
 import { useLog } from '../composables/useLog';
 import { usePlayer } from '../composables/usePlayer';
 import { useDownloadQueue } from '../composables/useDownloadQueue';
-import { parseInput } from '../utils/parse';
+import { extractUrl, parseInput } from '../utils/parse';
 import { safeFilename } from '../utils/download';
 import { forceHttps } from '../utils/url.ts';
 import { resolveShortLink } from '../utils/resolveShortLink';
@@ -156,17 +156,78 @@ async function loadAllTracks() {
   }
 }
 
+/* ---------- 搜索单曲 ---------- */
+
+
+async function handleSearch(keywords: string) {
+  try {
+    log('info', `搜索关键词：${keywords}`);
+    // type=1 搜索单曲，limit=50
+    const res = await api<any>('/search', { keywords, type: 1, limit: 50 });
+    const rawSongs = res?.result?.songs || [];
+    
+    if (rawSongs.length === 0) {
+      state.value = { 
+        kind: 'list', 
+        title: `搜索："${keywords}"`, 
+        count: 0, 
+        items: [] 
+      };
+      log('info', '未找到相关歌曲');
+      return;
+    }
+
+    // 1. 从搜索结果提取歌曲 ID
+    const ids = rawSongs.map((s: any) => s.id);
+    
+    // 2. 批量拉取完整详情（此时能拿到封面 picUrl、准确时长 dt 等）
+    const detailSongs = await fetchFullSongs(ids);
+    
+    // 3. 按原搜索顺序还原
+    const songs = mergeByIds(ids, detailSongs, []);
+
+    state.value = {
+      kind: 'list',
+      title: `搜索："${keywords}"`,
+      count: songs.length,
+      items: songs.map(s => ({ song: s, urlData: null })),
+    };
+    log('info', `搜索完成，找到 ${songs.length} 首歌曲`);
+  } catch (e) {
+    const msg = (e as Error).message;
+    state.value = { kind: 'error', error: msg };
+    log('error', '搜索失败：' + msg);
+  }
+}
+/* ---------- 主流程 ---------- */
+
 async function handleParse() {
   let raw = parseValue.value.trim();
   if (!raw) { state.value = { kind: 'empty' }; return; }
+  
   reset();
   selectedIds.value = new Set();
   state.value = { kind: 'loading' };
 
   try {
+    // 1. 从一堆分享文案中提取真实的 URL
+    raw = extractUrl(raw);
+
+    // 2. 短链接还原
     raw = await resolveShortLink(raw);
 
-    const info = parseInput(raw);
+    // 3. 尝试提取 ID / 链接
+    let info;
+    try {
+      info = parseInput(raw);
+    } catch (e) {
+      if ((e as Error).message === 'NOT_A_LINK') {
+        // 不是链接，直接走搜索流程
+        await handleSearch(raw);
+        return;
+      }
+      throw e;
+    }
 
     if (info.type === 'song') {
       const [detail, urlRes] = await Promise.all([
@@ -231,7 +292,6 @@ async function handleParse() {
         items: songs.map(s => ({ song: s, urlData: null })),
       };
       log('info', `解析专辑：${album.name}（${songs.length} 首）`);
-      return;
     }
   } catch (e) {
     const msg = (e as Error).message;
@@ -239,6 +299,7 @@ async function handleParse() {
     log('error', '解析失败：' + msg);
   }
 }
+
 </script>
 
 <template>
