@@ -89,20 +89,26 @@ const dlTitle = computed(() => {
     : '下载中（点击取消）';
   if (s === 'processing') return '嵌入元数据…（点击取消）';
   if (s === 'saving') return '保存中…';
-  if (s === 'done') return '已下载';
+  if (s === 'done') return '已下载（点击重新下载）';
   if (s === 'error') return `下载失败：${dlTask.value?.error ?? '未知错误'}（点击重试）`;
   if (s === 'canceled') return '已取消（点击重试）';
   return '下载';
 });
 
 function onDownloadClick() {
-  if (zipBatch.value?.active) return; // 批量进行中，单曲按钮忽略
+  if (zipBatch.value?.active) return;
   const s = dlStatus.value;
+  
+  // 正在进行中的状态，点击则取消
   if (s === 'queued' || s === 'fetching' || s === 'processing') {
     cancel(props.song.id);
     return;
   }
-  if (s === 'saving' || s === 'done') return;
+  
+  // 保存中不允许点击，防止重复保存
+  if (s === 'saving') return;
+
+  // idle / done / error / canceled 状态全部允许重新入队
   enqueueOne(props.song, props.level, props.urlData);
 }
 
@@ -150,7 +156,7 @@ const emit = defineEmits<{ 'update:selected': [value: boolean] }>();
       <button
         type="button"
         class="icon-btn"
-        :disabled="dlStatus === 'done' || dlStatus === 'saving' || zipBatch?.active"
+        :disabled="dlStatus === 'saving' || zipBatch?.active"
         :title="isThisPlaying ? '暂停' : '试听'"
         @click="onPlay"
       >
@@ -168,7 +174,7 @@ const emit = defineEmits<{ 'update:selected': [value: boolean] }>();
           'is-active': dlStatus === 'queued' || dlStatus === 'fetching'
             || dlStatus === 'processing' || dlStatus === 'saving',
         }"
-        :disabled="dlStatus === 'done' || dlStatus === 'saving'"
+        :disabled="dlStatus === 'saving'"
         :title="dlTitle"
         @click="onDownloadClick"
       >

@@ -1,6 +1,6 @@
-import { ref } from 'vue';
-import type { Song, SongUrlData } from '../types';
-import { forceHttps } from '../utils/url';
+import { ref } from "vue";
+import type { Song, SongUrlData } from "../types";
+import { forceHttps } from "../utils/url";
 
 const audio = ref<HTMLAudioElement | null>(null);
 const currentSong = ref<Song | null>(null);
@@ -18,31 +18,31 @@ export function usePlayer() {
    * 不同 id 则切换并开始播放。
    */
   async function play(song: Song, urlData: SongUrlData): Promise<void> {
-  const el = audio.value;
-  if (!el || !urlData.url) return;
+    const el = audio.value;
+    if (!el || !urlData.url) return;
 
-  if (currentSong.value?.id === song.id) {
-    if (el.paused) await el.play();
-    else el.pause();
-    return;
+    if (currentSong.value?.id === song.id) {
+      if (el.paused) await el.play();
+      else el.pause();
+      return;
+    }
+
+    currentSong.value = song;
+    currentUrlData.value = urlData;
+    el.src = forceHttps(urlData.url);
+    currentTime.value = 0;
+
+    // dt（毫秒）是权威时长；urlData.time 次之；
+    // 都没有就先显示 0:00，等 loadedmetadata 事件纠正
+    const dtMs = song.dt ?? 0;
+    duration.value = dtMs > 0 ? dtMs / 1000 : 0;
+
+    try {
+      await el.play();
+    } catch {
+      /* 自动播放被拦，UI 会显示暂停态 */
+    }
   }
-
-  currentSong.value = song;
-  currentUrlData.value = urlData;
-  el.src = forceHttps(urlData.url); 
-  currentTime.value = 0;
-
-  // dt（毫秒）是权威时长；urlData.time 次之；
-  // 都没有就先显示 0:00，等 loadedmetadata 事件纠正
-  const dtMs = song.dt ?? 0;
-  duration.value = dtMs > 0 ? dtMs / 1000 : 0;
-
-  try {
-    await el.play();
-  } catch {
-    /* 自动播放被拦，UI 会显示暂停态 */
-  }
-}
 
   async function toggle() {
     const el = audio.value;
@@ -65,13 +65,15 @@ export function usePlayer() {
     if (audio.value) audio.value.volume = clamped;
   }
 
-  function pause() { audio.value?.pause(); }
+  function pause() {
+    audio.value?.pause();
+  }
 
   function reset() {
     const el = audio.value;
     if (el) {
       el.pause();
-      el.removeAttribute('src');
+      el.removeAttribute("src");
       el.load();
     }
     currentSong.value = null;
@@ -88,7 +90,20 @@ export function usePlayer() {
   }
 
   return {
-    audio, currentSong, currentUrlData, isPlaying, currentTime, duration, volume,
-    isCurrent, play, toggle, seek, setVolume, pause, reset, bindAudio,
+    audio,
+    currentSong,
+    currentUrlData,
+    isPlaying,
+    currentTime,
+    duration,
+    volume,
+    isCurrent,
+    play,
+    toggle,
+    seek,
+    setVolume,
+    pause,
+    reset,
+    bindAudio,
   };
 }

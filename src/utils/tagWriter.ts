@@ -1,4 +1,4 @@
-import { applyTags, applyCoverArt, readCoverArt } from 'taglib-wasm/simple';
+import { applyCoverArt, applyTags, readCoverArt } from "taglib-wasm/simple";
 
 export interface TagData {
   title?: string;
@@ -8,7 +8,7 @@ export interface TagData {
 }
 // src/utils/tagWriter.ts（在 embedMetadata 函数内部扩展）
 
-import { sniffImageMimeType } from './coverRepair'; // 上面写的检测函数
+import { sniffImageMimeType } from "./coverRepair"; // 上面写的检测函数
 
 export async function embedMetadata(
   audioBuffer: ArrayBuffer,
@@ -46,7 +46,7 @@ export async function embedMetadata(
       const res = await fetch(tags.coverUrl);
       if (res.ok) {
         const coverData = new Uint8Array(await res.arrayBuffer());
-        const realMime = sniffImageMimeType(coverData) || 'image/jpeg';
+        const realMime = sniffImageMimeType(coverData) || "image/jpeg";
         result = await applyCoverArt(result, coverData, realMime);
       }
     } catch {

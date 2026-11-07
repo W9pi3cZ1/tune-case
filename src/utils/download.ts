@@ -58,11 +58,15 @@ export async function fetchWithProgress(
   url: string,
   opts: FetchWithProgressOptions = {},
 ): Promise<{ buffer: ArrayBuffer; contentType: string }> {
-  const res = await fetch(url, { mode: 'cors', credentials: 'omit', signal: opts.signal });
-  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const res = await fetch(url, {
+    mode: "cors",
+    credentials: "omit",
+    signal: opts.signal,
+  });
+  if (!res.ok) throw new Error("HTTP " + res.status);
 
-  const contentType = res.headers.get('content-type') || '';
-  const total = Number(res.headers.get('content-length') || 0);
+  const contentType = res.headers.get("content-type") || "";
+  const total = Number(res.headers.get("content-length") || 0);
 
   if (!res.body) {
     // 老浏览器 / 无 stream 支持
@@ -95,7 +99,7 @@ export async function fetchWithProgress(
 
 export function saveBlob(blob: Blob, filename: string): void {
   const objUrl = URL.createObjectURL(blob);
-  const a = document.createElement('a');
+  const a = document.createElement("a");
   a.href = objUrl;
   a.download = filename;
   document.body.appendChild(a);

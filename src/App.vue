@@ -75,7 +75,7 @@ onMounted(async () => {
 <template>
   <header class="headline">
     <h2 style="font-size: 1em">网易云音乐下载器</h2>
-    <a href="//github.com/W9pi3cZ1/ncmobile" target="_blank" rel="noopener" title="在 Github 上打开">
+    <a href="//github.com/W9pi3cZ1/tune-case" target="_blank" rel="noopener" title="在 Github 上打开">
       <IconGithub />
     </a>
   </header>

@@ -40,20 +40,20 @@ function isExpired(exp?: number, now = Date.now()): boolean {
 /** 只保留 163 / music.163.com 及其子域；无 domain 信息时放行 */
 function isNeteaseDomain(domain?: string): boolean {
   if (!domain) return true;
-  const d = domain.replace(/^\./, '').trim().toLowerCase();
+  const d = domain.replace(/^\./, "").trim().toLowerCase();
   if (!d) return true;
-  return d === '163.com' || d.endsWith('.163.com');
+  return d === "163.com" || d.endsWith(".163.com");
 }
 
 /* ---------- 三种格式的解析 ---------- */
 
 /** Netscape：domain \t flag \t path \t secure \t expiration \t name \t value */
 function parseNetscapeLine(line: string): ParsedCookie | null {
-  const cols = line.split('\t');
+  const cols = line.split("\t");
   if (cols.length < 7) return null;
   const [domain, , , , expStr, name, ...rest] = cols;
   if (!name) return null;
-  const value = rest.join('\t');
+  const value = rest.join("\t");
   return {
     name: name.trim(),
     value: value.trim(),
@@ -64,7 +64,7 @@ function parseNetscapeLine(line: string): ParsedCookie | null {
 
 /** Header String 的一段：`k=v` */
 function parseHeaderSegment(seg: string): ParsedCookie | null {
-  const eq = seg.indexOf('=');
+  const eq = seg.indexOf("=");
   if (eq <= 0) return null;
   const name = seg.slice(0, eq).trim();
   const value = seg.slice(eq + 1).trim();
@@ -84,9 +84,11 @@ function parseJsonCookies(text: string): ParsedCookie[] | null {
   let arr: any[];
   if (Array.isArray(obj)) {
     arr = obj;
-  } else if (obj && typeof obj === 'object' && Array.isArray((obj as any).cookies)) {
+  } else if (
+    obj && typeof obj === "object" && Array.isArray((obj as any).cookies)
+  ) {
     arr = (obj as any).cookies;
-  } else if (obj && typeof obj === 'object') {
+  } else if (obj && typeof obj === "object") {
     arr = Object.entries(obj as Record<string, unknown>)
       .map(([k, v]) => ({ name: k, value: String(v) }));
   } else {
@@ -95,19 +97,19 @@ function parseJsonCookies(text: string): ParsedCookie[] | null {
 
   const out: ParsedCookie[] = [];
   for (const c of arr) {
-    if (!c || typeof c !== 'object') continue;
-    const name = String(c.name ?? '').trim();
+    if (!c || typeof c !== "object") continue;
+    const name = String(c.name ?? "").trim();
     if (!name) continue;
     out.push({
       name,
-      value: String(c.value ?? ''),
-      domain: typeof c.domain === 'string' ? c.domain : undefined,
+      value: String(c.value ?? ""),
+      domain: typeof c.domain === "string" ? c.domain : undefined,
       expiration: normalizeExp(
-        typeof c.expirationDate === 'number'
+        typeof c.expirationDate === "number"
           ? c.expirationDate
-          : typeof c.expiration === 'number'
-            ? c.expiration
-            : undefined
+          : typeof c.expiration === "number"
+          ? c.expiration
+          : undefined,
       ),
     });
   }
@@ -126,12 +128,12 @@ function parseLines(text: string): ParsedCookie[] {
     let isHttpOnlyNetscape = false;
     if (/^#HttpOnly_/i.test(line)) {
       isHttpOnlyNetscape = true;
-      line = line.replace(/^#HttpOnly_/i, '');
+      line = line.replace(/^#HttpOnly_/i, "");
     }
-    if (!isHttpOnlyNetscape && line.startsWith('#')) continue;
+    if (!isHttpOnlyNetscape && line.startsWith("#")) continue;
 
     // Netscape：含 tab 且能切出 >= 7 列
-    if (line.includes('\t')) {
+    if (line.includes("\t")) {
       const c = parseNetscapeLine(line);
       if (c) {
         out.push(c);
@@ -140,7 +142,7 @@ function parseLines(text: string): ParsedCookie[] {
     }
 
     // Header String / 每行一条：按 `;` 拆段
-    for (const seg of line.split(';')) {
+    for (const seg of line.split(";")) {
       const s = seg.trim();
       if (!s) continue;
       const c = parseHeaderSegment(s);
@@ -154,14 +156,18 @@ function parseLines(text: string): ParsedCookie[] {
 
 export function parseCookieFile(text: string): ParseCookieResult {
   const empty: ParseCookieResult = {
-    header: '', total: 0, kept: 0,
-    droppedDomain: 0, droppedExpired: 0, hasMusicU: false,
+    header: "",
+    total: 0,
+    kept: 0,
+    droppedDomain: 0,
+    droppedExpired: 0,
+    hasMusicU: false,
   };
 
   const clean = stripBom(text).trim();
   if (!clean) return empty;
 
-  const looksJson = clean.startsWith('{') || clean.startsWith('[');
+  const looksJson = clean.startsWith("{") || clean.startsWith("[");
   let parsed: ParsedCookie[];
   if (looksJson) {
     const j = parseJsonCookies(clean);
@@ -176,9 +182,15 @@ export function parseCookieFile(text: string): ParseCookieResult {
   const kept: ParsedCookie[] = [];
 
   for (const c of parsed) {
-    if (!c.name || !c.value) continue;          // 空名/空值跳过
-    if (!isNeteaseDomain(c.domain)) { droppedDomain++; continue; }
-    if (isExpired(c.expiration)) { droppedExpired++; continue; }
+    if (!c.name || !c.value) continue; // 空名/空值跳过
+    if (!isNeteaseDomain(c.domain)) {
+      droppedDomain++;
+      continue;
+    }
+    if (isExpired(c.expiration)) {
+      droppedExpired++;
+      continue;
+    }
     kept.push(c);
   }
 
@@ -191,7 +203,7 @@ export function parseCookieFile(text: string): ParseCookieResult {
 
   const header = Array.from(map.entries())
     .map(([k, v]) => `${k}=${v}`)
-    .join('; ');
+    .join("; ");
 
   return {
     header,
