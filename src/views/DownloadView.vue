@@ -9,6 +9,7 @@ import { useDownloadQueue } from '../composables/useDownloadQueue';
 import { parseInput } from '../utils/parse';
 import { safeFilename } from '../utils/download';
 import { forceHttps } from '../utils/url.ts';
+import { resolveShortLink } from '../utils/resolveShortLink';
 
 const { api } = useApi();
 const { log } = useLog();
@@ -156,13 +157,15 @@ async function loadAllTracks() {
 }
 
 async function handleParse() {
-  const raw = parseValue.value.trim();
+  let raw = parseValue.value.trim();
   if (!raw) { state.value = { kind: 'empty' }; return; }
   reset();
   selectedIds.value = new Set();
   state.value = { kind: 'loading' };
 
   try {
+    raw = await resolveShortLink(raw);
+
     const info = parseInput(raw);
 
     if (info.type === 'song') {
