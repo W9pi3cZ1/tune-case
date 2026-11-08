@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue';
+import { computed, onActivated, onUnmounted, ref, watch } from 'vue';
 import type { LoginMethod } from '../types';
 import { useAuth } from '../composables/useAuth';
 import { useCookie } from '../composables/useCookie';
@@ -74,9 +74,22 @@ async function onSubmit() {
   }
 }
 
+// 1. 加上 onActivated 兜底（解决切走再切回的情况）
+onActivated(() => {
+  if (method.value === 'qr' && !unikey.value && !polling.value) {
+    refreshQrKey().catch(() => { /* 内部已 log */ });
+  }
+});
+
+// 2. 修改登出逻辑
 async function onLogout() {
   await logout();
   reset();
+  
+  // 登出后，如果当前停留在二维码登录界面，立即拉取新的二维码
+  if (method.value === 'qr') {
+    refreshQrKey().catch(() => { /* 内部已 log */ });
+  }
 }
 
 onUnmounted(() => stopPolling());
